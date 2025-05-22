@@ -34,7 +34,7 @@ interface GraphPermission {
 }
 
 export function PermissionDetail() {
-  const { type, id } = useParams();
+  const { id } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [permission, setPermission] = useState<GraphPermission | null>(null);
@@ -46,21 +46,33 @@ export function PermissionDetail() {
       setLoading(true);
       setError(null);
       try {
-        // Fetch static data
-        const url = type === 'app' 
-          ? 'https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphAppRoles.json'
-          : 'https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphDelegateRoles.json';
+        // Try both application and delegated permissions
+        const [appResponse, delegateResponse] = await Promise.all([
+          fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphAppRoles.json'),
+          fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphDelegateRoles.json')
+        ]);
 
-        const response = await fetch(url);
-        const data = await response.json();
-        let permissionData = data.find((p: GraphPermission) => p.Id === id);
+        const appData = await appResponse.json();
+        const delegateData = await delegateResponse.json();
+
+        let permissionData = appData.find((p: GraphPermission) => p.Id === id);
+        let type = 'Application';
+
+        if (!permissionData) {
+          permissionData = delegateData.find((p: GraphPermission) => p.Id === id);
+          type = 'Delegated';
+        }
+
+        if (permissionData) {
+          permissionData.Type = type;
+        }
 
         // If authenticated, fetch additional details from Graph API
-        if (isAuthenticated) {
+        if (isAuthenticated && permissionData) {
           try {
             const graphService = GraphService.getInstance();
             const graphData = await graphService.getServicePrincipalPermissions('00000003-0000-0000-c000-000000000000');
-            const graphPermission = type === 'app'
+            const graphPermission = type === 'Application'
               ? graphData.appRoles.find((p: any) => p.id === id)
               : graphData.oauth2PermissionScopes.find((p: any) => p.id === id);
 
@@ -68,7 +80,7 @@ export function PermissionDetail() {
               permissionData = {
                 ...permissionData,
                 ...graphPermission,
-                Type: type === 'app' ? 'Application' : 'Delegated',
+                Type: type,
                 Origin: 'Microsoft Graph'
               };
             }
@@ -86,8 +98,10 @@ export function PermissionDetail() {
       }
     };
 
-    fetchPermissionDetails();
-  }, [type, id, isAuthenticated]);
+    if (id) {
+      fetchPermissionDetails();
+    }
+  }, [id, isAuthenticated]);
 
   if (loading) {
     return (
@@ -123,9 +137,8 @@ export function PermissionDetail() {
         <title>{`${permission.Value} - Microsoft Graph Permission Details`}</title>
         <meta 
           name="description" 
-          content={`Detailed information about the Microsoft Graph ${type} permission: ${permission.Value}`} 
+          content={`Detailed information about the Microsoft Graph ${permission.Type} permission: ${permission.Value}`} 
         />
-        <link rel="canonical" href={window.location.href} />
       </Helmet>
 
       <div className="space-y-6">
@@ -141,7 +154,9 @@ export function PermissionDetail() {
             </div>
             
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge color="gray">{permission.Type}</Badge>
+              <Badge color={permission.Type === 'Application' ? 'green' : 'purple'}>
+                {permission.Type}
+              </Badge>
               {permission.IsBuiltIn && <Badge color="green">Built-in</Badge>}
               {permission.RequiresAdminConsent && <Badge color="red">Requires Admin Consent</Badge>}
               {permission.IsEnabled && <Badge color="green">Enabled</Badge>}

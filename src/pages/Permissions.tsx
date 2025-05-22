@@ -273,7 +273,7 @@ export function Permissions() {
                       <TableRow 
                         key={`${permission.Type}-${permission.Id}`}
                         className="cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-                        onClick={() => navigate(`/permissions/${permission.Type?.toLowerCase()}/${permission.Id}`)}
+                        onClick={() => navigate(`/permissions/${permission.Id}`)}
                       >
                         <TableCell>
                           <div className="flex flex-col gap-1">
