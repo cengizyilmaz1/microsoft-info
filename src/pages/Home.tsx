@@ -1,3 +1,4 @@
+import React from 'react';
 import { Card, Title, Text } from '@tremor/react';
 
 export function Home() {
