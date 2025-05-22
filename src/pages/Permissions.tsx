@@ -38,7 +38,13 @@ import {
   ChatBubbleLeftIcon,
   DocumentIcon,
   DevicePhoneMobileIcon,
-  CogIcon
+  CogIcon,
+  BookOpenIcon,
+  BuildingOfficeIcon,
+  CloudIcon,
+  ShieldExclamationIcon,
+  UserGroupIcon,
+  RectangleGroupIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphPermission {
@@ -54,66 +60,89 @@ interface GraphPermission {
   AllowedMemberTypes?: string[];
 }
 
-// Define permission categories with their icons and descriptions
 const permissionCategories = {
-  'directory': {
+  'identity': {
     icon: UsersIcon,
-    title: 'Directory',
-    description: 'Permissions related to Azure AD directory management',
+    title: 'Identity & Access',
+    description: 'User authentication, authorization, and identity management',
+    patterns: ['user', 'profile', 'member', 'identity', 'auth', 'signin', 'directory.read', 'directory.write', 'directory.accessasuser'],
     color: 'blue'
   },
-  'user': {
-    icon: UsersIcon,
-    title: 'User',
-    description: 'User profile and management permissions',
-    color: 'green'
+  'groups': {
+    icon: UserGroupIcon,
+    title: 'Groups & Teams',
+    description: 'Microsoft 365 groups and Teams management',
+    patterns: ['group', 'team', 'channel', 'chat', 'presence', 'groupmember'],
+    color: 'indigo'
   },
   'mail': {
     icon: EnvelopeIcon,
-    title: 'Mail',
-    description: 'Email and message management permissions',
+    title: 'Mail & Communications',
+    description: 'Email, messages, and communication services',
+    patterns: ['mail', 'message', 'smtp', 'imap', 'email', 'inbox'],
     color: 'purple'
   },
   'files': {
     icon: FolderIcon,
-    title: 'Files',
-    description: 'File and storage related permissions',
-    color: 'yellow'
+    title: 'Files & Storage',
+    description: 'File storage, sharing, and OneDrive management',
+    patterns: ['files', 'drive', 'storage', 'onedrive', 'sharepoint', 'site'],
+    color: 'orange'
   },
   'calendar': {
     icon: CalendarIcon,
-    title: 'Calendar',
-    description: 'Calendar and event management permissions',
-    color: 'orange'
-  },
-  'chat': {
-    icon: ChatBubbleLeftIcon,
-    title: 'Chat & Teams',
-    description: 'Teams and chat related permissions',
-    color: 'indigo'
-  },
-  'sites': {
-    icon: DocumentIcon,
-    title: 'Sites & SharePoint',
-    description: 'SharePoint and sites related permissions',
-    color: 'red'
+    title: 'Calendar & Events',
+    description: 'Calendar, scheduling, and event management',
+    patterns: ['calendar', 'event', 'schedule', 'meeting', 'reminder'],
+    color: 'yellow'
   },
   'device': {
     icon: DevicePhoneMobileIcon,
-    title: 'Device',
-    description: 'Device management permissions',
+    title: 'Device Management',
+    description: 'Device enrollment, configuration, and security',
+    patterns: ['device', 'mobileapp', 'endpoint', 'intune', 'mobile'],
     color: 'cyan'
   },
-  'application': {
-    icon: CogIcon,
-    title: 'Application',
-    description: 'Application management permissions',
+  'security': {
+    icon: ShieldExclamationIcon,
+    title: 'Security & Compliance',
+    description: 'Security controls, compliance, and threat protection',
+    patterns: ['security', 'threat', 'risk', 'compliance', 'audit', 'policy', 'trust'],
+    color: 'red'
+  },
+  'applications': {
+    icon: RectangleGroupIcon,
+    title: 'Applications & Services',
+    description: 'Application registration and service management',
+    patterns: ['application', 'app', 'service', 'api', 'permission'],
+    color: 'green'
+  },
+  'organization': {
+    icon: BuildingOfficeIcon,
+    title: 'Organization',
+    description: 'Tenant and organization-wide settings',
+    patterns: ['organization', 'company', 'tenant', 'domain', 'directory'],
     color: 'pink'
   },
+  'cloud': {
+    icon: CloudIcon,
+    title: 'Cloud Services',
+    description: 'Azure and cloud service management',
+    patterns: ['azure', 'cloud', 'service', 'resource', 'subscription'],
+    color: 'sky'
+  },
+  'reports': {
+    icon: BookOpenIcon,
+    title: 'Reports & Analytics',
+    description: 'Usage reports and analytics data',
+    patterns: ['report', 'analytics', 'usage', 'audit', 'log'],
+    color: 'amber'
+  },
   'other': {
-    icon: DocumentMagnifyingGlassIcon,
+    icon: CogIcon,
     title: 'Other',
     description: 'Other miscellaneous permissions',
+    patterns: [],
     color: 'gray'
   }
 };
@@ -182,15 +211,34 @@ export function Permissions() {
 
   const getPermissionCategory = (value: string): string => {
     const lowerValue = value.toLowerCase();
-    if (lowerValue.includes('directory') || lowerValue.includes('organization')) return 'directory';
-    if (lowerValue.includes('mail') || lowerValue.includes('message')) return 'mail';
-    if (lowerValue.includes('file') || lowerValue.includes('drive')) return 'files';
-    if (lowerValue.includes('user') || lowerValue.includes('profile')) return 'user';
-    if (lowerValue.includes('calendar') || lowerValue.includes('event')) return 'calendar';
-    if (lowerValue.includes('chat') || lowerValue.includes('teams')) return 'chat';
-    if (lowerValue.includes('site') || lowerValue.includes('sharepoint')) return 'sites';
-    if (lowerValue.includes('device') || lowerValue.includes('endpoint')) return 'device';
-    if (lowerValue.includes('application') || lowerValue.includes('app')) return 'application';
+    
+    // Check each category's patterns
+    for (const [category, config] of Object.entries(permissionCategories)) {
+      if (category === 'other') continue; // Skip 'other' category in initial check
+      
+      // Check if any pattern matches
+      if (config.patterns.some(pattern => {
+        // Handle exact matches (e.g., "Directory.Read.All")
+        if (lowerValue === pattern) return true;
+        
+        // Handle partial matches with word boundaries
+        const regex = new RegExp(`\\b${pattern}\\b`, 'i');
+        return regex.test(lowerValue);
+      })) {
+        return category;
+      }
+    }
+
+    // Special case handling for complex permissions
+    if (lowerValue.includes('directory') && (lowerValue.includes('read') || lowerValue.includes('write'))) {
+      return 'identity';
+    }
+    
+    if (lowerValue.includes('group') && (lowerValue.includes('read') || lowerValue.includes('write'))) {
+      return 'groups';
+    }
+    
+    // Default to 'other' if no category matches
     return 'other';
   };
 
