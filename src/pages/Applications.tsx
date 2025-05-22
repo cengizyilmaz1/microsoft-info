@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -19,6 +20,7 @@ interface MicrosoftApp {
 }
 
 export function Applications() {
+  const navigate = useNavigate();
   const [apps, setApps] = useState<MicrosoftApp[]>([]);
   const [search, setSearch] = useState('');
 
@@ -55,7 +57,11 @@ export function Applications() {
         </TableHead>
         <TableBody>
           {filteredApps.map((app) => (
-            <TableRow key={app.AppId}>
+            <TableRow 
+              key={app.AppId}
+              className="cursor-pointer hover:bg-gray-50"
+              onClick={() => navigate(`/applications/${app.AppId}`)}
+            >
               <TableCell>{app.AppDisplayName}</TableCell>
               <TableCell>{app.AppId}</TableCell>
               <TableCell>{app.Source}</TableCell>
