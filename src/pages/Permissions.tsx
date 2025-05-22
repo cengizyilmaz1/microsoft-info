@@ -16,17 +16,29 @@ import {
   Badge,
   Text,
   Grid,
-  Col,
   Metric,
   Button,
   Flex,
   Select,
-  SelectItem
+  SelectItem,
+  Tab,
+  TabGroup,
+  TabList,
+  TabPanel,
+  TabPanels
 } from '@tremor/react';
 import { 
   ShieldCheckIcon, 
   KeyIcon, 
-  DocumentMagnifyingGlassIcon 
+  DocumentMagnifyingGlassIcon,
+  FolderIcon,
+  EnvelopeIcon,
+  UsersIcon,
+  CalendarIcon,
+  ChatBubbleLeftIcon,
+  DocumentIcon,
+  DevicePhoneMobileIcon,
+  CogIcon
 } from '@heroicons/react/24/outline';
 
 interface GraphPermission {
@@ -42,13 +54,77 @@ interface GraphPermission {
   AllowedMemberTypes?: string[];
 }
 
+// Define permission categories with their icons and descriptions
+const permissionCategories = {
+  'directory': {
+    icon: UsersIcon,
+    title: 'Directory',
+    description: 'Permissions related to Azure AD directory management',
+    color: 'blue'
+  },
+  'user': {
+    icon: UsersIcon,
+    title: 'User',
+    description: 'User profile and management permissions',
+    color: 'green'
+  },
+  'mail': {
+    icon: EnvelopeIcon,
+    title: 'Mail',
+    description: 'Email and message management permissions',
+    color: 'purple'
+  },
+  'files': {
+    icon: FolderIcon,
+    title: 'Files',
+    description: 'File and storage related permissions',
+    color: 'yellow'
+  },
+  'calendar': {
+    icon: CalendarIcon,
+    title: 'Calendar',
+    description: 'Calendar and event management permissions',
+    color: 'orange'
+  },
+  'chat': {
+    icon: ChatBubbleLeftIcon,
+    title: 'Chat & Teams',
+    description: 'Teams and chat related permissions',
+    color: 'indigo'
+  },
+  'sites': {
+    icon: DocumentIcon,
+    title: 'Sites & SharePoint',
+    description: 'SharePoint and sites related permissions',
+    color: 'red'
+  },
+  'device': {
+    icon: DevicePhoneMobileIcon,
+    title: 'Device',
+    description: 'Device management permissions',
+    color: 'cyan'
+  },
+  'application': {
+    icon: CogIcon,
+    title: 'Application',
+    description: 'Application management permissions',
+    color: 'pink'
+  },
+  'other': {
+    icon: DocumentMagnifyingGlassIcon,
+    title: 'Other',
+    description: 'Other miscellaneous permissions',
+    color: 'gray'
+  }
+};
+
 export function Permissions() {
   const navigate = useNavigate();
   const { isAuthenticated, login } = useAuth();
   const [permissions, setPermissions] = useState<GraphPermission[]>([]);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,12 +180,19 @@ export function Permissions() {
     fetchPermissionsData();
   }, [isAuthenticated]);
 
-  const getPermissionCategory = (value: string) => {
-    const parts = value.split('.');
-    return parts[0] || 'Other';
+  const getPermissionCategory = (value: string): string => {
+    const lowerValue = value.toLowerCase();
+    if (lowerValue.includes('directory') || lowerValue.includes('organization')) return 'directory';
+    if (lowerValue.includes('mail') || lowerValue.includes('message')) return 'mail';
+    if (lowerValue.includes('file') || lowerValue.includes('drive')) return 'files';
+    if (lowerValue.includes('user') || lowerValue.includes('profile')) return 'user';
+    if (lowerValue.includes('calendar') || lowerValue.includes('event')) return 'calendar';
+    if (lowerValue.includes('chat') || lowerValue.includes('teams')) return 'chat';
+    if (lowerValue.includes('site') || lowerValue.includes('sharepoint')) return 'sites';
+    if (lowerValue.includes('device') || lowerValue.includes('endpoint')) return 'device';
+    if (lowerValue.includes('application') || lowerValue.includes('app')) return 'application';
+    return 'other';
   };
-
-  const categories = Array.from(new Set(permissions.map(p => getPermissionCategory(p.Value))));
 
   const filteredPermissions = permissions.filter(permission => {
     const matchesSearch = 
@@ -118,10 +201,15 @@ export function Permissions() {
       (permission.Description || permission.AdminConsentDescription || '').toLowerCase().includes(search.toLowerCase());
     
     const matchesType = typeFilter === 'all' || permission.Type === typeFilter;
-    const matchesCategory = categoryFilter === 'all' || getPermissionCategory(permission.Value) === categoryFilter;
+    const matchesCategory = selectedCategory === 'all' || getPermissionCategory(permission.Value) === selectedCategory;
 
     return matchesSearch && matchesType && matchesCategory;
   });
+
+  const categorizedPermissions = Object.keys(permissionCategories).reduce((acc, category) => {
+    acc[category] = filteredPermissions.filter(p => getPermissionCategory(p.Value) === category);
+    return acc;
+  }, {} as Record<string, GraphPermission[]>);
 
   const stats = {
     total: permissions.length,
@@ -130,20 +218,67 @@ export function Permissions() {
     adminConsent: permissions.filter(p => p.RequiresAdminConsent).length
   };
 
+  const renderPermissionTable = (permissions: GraphPermission[]) => (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableHeaderCell>Permission</TableHeaderCell>
+          <TableHeaderCell>Display Name</TableHeaderCell>
+          <TableHeaderCell>Description</TableHeaderCell>
+          <TableHeaderCell>Type</TableHeaderCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {permissions.map((permission) => (
+          <TableRow 
+            key={`${permission.Type}-${permission.Id}`}
+            className="cursor-pointer hover:bg-gray-50 transition-colors duration-200"
+            onClick={() => navigate(`/permissions/${permission.Id}`)}
+          >
+            <TableCell>
+              <div className="flex flex-col gap-1">
+                <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                  {permission.Value}
+                </code>
+                {permission.RequiresAdminConsent && (
+                  <Badge size="xs" color="red">
+                    Admin Consent
+                  </Badge>
+                )}
+              </div>
+            </TableCell>
+            <TableCell>
+              {permission.DisplayName || permission.AdminConsentDisplayName}
+            </TableCell>
+            <TableCell className="max-w-md">
+              <div className="line-clamp-2">
+                {permission.Description || permission.AdminConsentDescription}
+              </div>
+            </TableCell>
+            <TableCell>
+              <Badge 
+                color={permission.Type === 'Application' ? 'green' : 'purple'}
+                size="sm"
+              >
+                {permission.Type}
+              </Badge>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+
   return (
     <>
       <Helmet>
         <title>Microsoft Graph Permissions Explorer</title>
-        <meta name="description" content="Explore and search Microsoft Graph permissions, including both application and delegated permissions with detailed information." />
-        <link rel="canonical" href={window.location.href} />
+        <meta name="description" content="Explore and search Microsoft Graph permissions by category, including both application and delegated permissions." />
       </Helmet>
 
       <div className="space-y-6">
         <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-6">
-          <Card 
-            decoration="top"
-            decorationColor="blue"
-          >
+          <Card decoration="top" decorationColor="blue">
             <Flex>
               <div>
                 <Text>Total Permissions</Text>
@@ -153,10 +288,7 @@ export function Permissions() {
             </Flex>
           </Card>
 
-          <Card
-            decoration="top"
-            decorationColor="green"
-          >
+          <Card decoration="top" decorationColor="green">
             <Flex>
               <div>
                 <Text>Application</Text>
@@ -166,10 +298,7 @@ export function Permissions() {
             </Flex>
           </Card>
 
-          <Card
-            decoration="top"
-            decorationColor="purple"
-          >
+          <Card decoration="top" decorationColor="purple">
             <Flex>
               <div>
                 <Text>Delegated</Text>
@@ -179,10 +308,7 @@ export function Permissions() {
             </Flex>
           </Card>
 
-          <Card
-            decoration="top"
-            decorationColor="orange"
-          >
+          <Card decoration="top" decorationColor="orange">
             <Flex>
               <div>
                 <Text>Admin Consent</Text>
@@ -228,13 +354,13 @@ export function Permissions() {
               </Select>
 
               <Select
-                value={categoryFilter}
-                onValueChange={setCategoryFilter}
+                value={selectedCategory}
+                onValueChange={setSelectedCategory}
                 placeholder="Filter by category"
               >
                 <SelectItem value="all">All Categories</SelectItem>
-                {categories.map(category => (
-                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                {Object.entries(permissionCategories).map(([key, { title }]) => (
+                  <SelectItem key={key} value={key}>{title}</SelectItem>
                 ))}
               </Select>
             </Grid>
@@ -245,75 +371,36 @@ export function Permissions() {
               </div>
             )}
 
-            <div className="rounded-tremor-default border border-tremor-border">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableHeaderCell>Permission</TableHeaderCell>
-                    <TableHeaderCell>Display Name</TableHeaderCell>
-                    <TableHeaderCell>Description</TableHeaderCell>
-                    <TableHeaderCell>Type</TableHeaderCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center">
-                        Loading permissions...
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredPermissions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center">
-                        No permissions found matching your criteria.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredPermissions.map((permission) => (
-                      <TableRow 
-                        key={`${permission.Type}-${permission.Id}`}
-                        className="cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-                        onClick={() => navigate(`/permissions/${permission.Id}`)}
-                      >
-                        <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                              {permission.Value}
-                            </code>
-                            <div className="flex gap-1 flex-wrap">
-                              <Badge size="xs" color="blue">
-                                {getPermissionCategory(permission.Value)}
-                              </Badge>
-                              {permission.RequiresAdminConsent && (
-                                <Badge size="xs" color="red">
-                                  Admin Consent
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {permission.DisplayName || permission.AdminConsentDisplayName}
-                        </TableCell>
-                        <TableCell className="max-w-md">
-                          <div className="line-clamp-2">
-                            {permission.Description || permission.AdminConsentDescription}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            color={permission.Type === 'Application' ? 'green' : 'purple'}
-                            size="sm"
-                          >
-                            {permission.Type}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            <TabGroup>
+              <TabList>
+                {Object.entries(permissionCategories).map(([key, { title, icon: Icon }]) => (
+                  <Tab key={key} className="flex items-center gap-2">
+                    <Icon className="h-5 w-5" />
+                    {title}
+                    <Badge size="xs">{categorizedPermissions[key]?.length || 0}</Badge>
+                  </Tab>
+                ))}
+              </TabList>
+              <TabPanels>
+                {Object.entries(permissionCategories).map(([key, { title, description }]) => (
+                  <TabPanel key={key}>
+                    <div className="mt-4">
+                      <Title>{title}</Title>
+                      <Text className="mt-2">{description}</Text>
+                      <div className="mt-4">
+                        {isLoading ? (
+                          <div className="text-center py-4">Loading permissions...</div>
+                        ) : categorizedPermissions[key]?.length === 0 ? (
+                          <div className="text-center py-4">No permissions found in this category.</div>
+                        ) : (
+                          renderPermissionTable(categorizedPermissions[key])
+                        )}
+                      </div>
+                    </div>
+                  </TabPanel>
+                ))}
+              </TabPanels>
+            </TabGroup>
           </div>
         </Card>
       </div>
