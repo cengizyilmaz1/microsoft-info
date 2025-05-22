@@ -13,18 +13,21 @@ import {
   TableCell,
   Title,
   TextInput,
-  Tab,
-  TabList,
-  TabGroup,
   Badge,
   Text,
   Grid,
   Col,
   Metric,
-  DonutChart,
   Button,
-  Flex
+  Flex,
+  Select,
+  SelectItem
 } from '@tremor/react';
+import { 
+  ShieldCheckIcon, 
+  KeyIcon, 
+  DocumentMagnifyingGlassIcon 
+} from '@heroicons/react/24/outline';
 
 interface GraphPermission {
   Id: string;
@@ -33,19 +36,19 @@ interface GraphPermission {
   AdminConsentDisplayName?: string;
   Description?: string;
   AdminConsentDescription?: string;
-  Type?: string;
-  Origin?: string;
+  Type?: 'Application' | 'Delegated';
   IsBuiltIn?: boolean;
   RequiresAdminConsent?: boolean;
+  AllowedMemberTypes?: string[];
 }
 
 export function Permissions() {
   const navigate = useNavigate();
   const { isAuthenticated, login } = useAuth();
-  const [activeTab, setActiveTab] = useState('app');
-  const [appPermissions, setAppPermissions] = useState<GraphPermission[]>([]);
-  const [delegatePermissions, setDelegatePermissions] = useState<GraphPermission[]>([]);
+  const [permissions, setPermissions] = useState<GraphPermission[]>([]);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,49 +56,42 @@ export function Permissions() {
     setIsLoading(true);
     setError(null);
     try {
-      // Fetch static data
-      const [appRolesResponse, delegateRolesResponse] = await Promise.all([
+      const [appResponse, delegateResponse] = await Promise.all([
         fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphAppRoles.json'),
         fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphDelegateRoles.json')
       ]);
 
-      const staticAppRoles = await appRolesResponse.json();
-      const staticDelegateRoles = await delegateRolesResponse.json();
+      const appRoles = await appResponse.json();
+      const delegateRoles = await delegateResponse.json();
 
-      // If authenticated, fetch live data from Graph API
+      let combinedPermissions = [
+        ...appRoles.map((role: GraphPermission) => ({ ...role, Type: 'Application' as const })),
+        ...delegateRoles.map((role: GraphPermission) => ({ ...role, Type: 'Delegated' as const }))
+      ];
+
       if (isAuthenticated) {
-        const graphService = GraphService.getInstance();
         try {
-          const graphPermissions = await graphService.getServicePrincipalPermissions('00000003-0000-0000-c000-000000000000');
+          const graphService = GraphService.getInstance();
+          const graphData = await graphService.getServicePrincipalPermissions('00000003-0000-0000-c000-000000000000');
           
-          // Merge static and live data
-          const mergedAppRoles = staticAppRoles.map((role: GraphPermission) => ({
-            ...role,
-            ...graphPermissions.appRoles.find((graphRole: any) => graphRole.id === role.Id),
-            Type: 'Application',
-            Origin: 'Microsoft Graph'
-          }));
-
-          const mergedDelegateRoles = staticDelegateRoles.map((role: GraphPermission) => ({
-            ...role,
-            ...graphPermissions.oauth2PermissionScopes.find((graphRole: any) => graphRole.id === role.Id),
-            Type: 'Delegated',
-            Origin: 'Microsoft Graph'
-          }));
-
-          setAppPermissions(mergedAppRoles);
-          setDelegatePermissions(mergedDelegateRoles);
+          combinedPermissions = combinedPermissions.map(permission => {
+            const graphPermission = permission.Type === 'Application'
+              ? graphData.appRoles.find((p: any) => p.id === permission.Id)
+              : graphData.oauth2PermissionScopes.find((p: any) => p.id === permission.Id);
+            
+            return {
+              ...permission,
+              ...graphPermission,
+              IsBuiltIn: !!graphPermission?.isBuiltIn,
+              RequiresAdminConsent: !!graphPermission?.isEnabled
+            };
+          });
         } catch (error) {
-          console.error('Error fetching live permissions:', error);
-          // Fall back to static data
-          setAppPermissions(staticAppRoles.map((role: GraphPermission) => ({ ...role, Type: 'Application' })));
-          setDelegatePermissions(staticDelegateRoles.map((role: GraphPermission) => ({ ...role, Type: 'Delegated' })));
+          console.error('Error fetching Graph permissions:', error);
         }
-      } else {
-        // Use static data only
-        setAppPermissions(staticAppRoles.map((role: GraphPermission) => ({ ...role, Type: 'Application' })));
-        setDelegatePermissions(staticDelegateRoles.map((role: GraphPermission) => ({ ...role, Type: 'Delegated' })));
       }
+
+      setPermissions(combinedPermissions);
     } catch (error) {
       console.error('Error fetching permissions:', error);
       setError('Failed to load permissions data');
@@ -108,97 +104,140 @@ export function Permissions() {
     fetchPermissionsData();
   }, [isAuthenticated]);
 
-  const filteredPermissions = (activeTab === 'app' ? appPermissions : delegatePermissions)
-    .filter(permission => {
-      const searchValue = search.toLowerCase();
-      const value = permission.Value?.toLowerCase() || '';
-      const displayName = (permission.DisplayName || permission.AdminConsentDisplayName || '').toLowerCase();
-      const description = (permission.Description || permission.AdminConsentDescription || '').toLowerCase();
-      
-      return value.includes(searchValue) || 
-             displayName.includes(searchValue) || 
-             description.includes(searchValue);
-    });
-
   const getPermissionCategory = (value: string) => {
     const parts = value.split('.');
     return parts[0] || 'Other';
   };
 
-  const categoryStats = filteredPermissions.reduce((acc: Record<string, number>, permission) => {
-    const category = getPermissionCategory(permission.Value);
-    acc[category] = (acc[category] || 0) + 1;
-    return acc;
-  }, {});
+  const categories = Array.from(new Set(permissions.map(p => getPermissionCategory(p.Value))));
 
-  const chartData = Object.entries(categoryStats).map(([category, count]) => ({
-    category,
-    count
-  }));
+  const filteredPermissions = permissions.filter(permission => {
+    const matchesSearch = 
+      permission.Value.toLowerCase().includes(search.toLowerCase()) ||
+      (permission.DisplayName || permission.AdminConsentDisplayName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (permission.Description || permission.AdminConsentDescription || '').toLowerCase().includes(search.toLowerCase());
+    
+    const matchesType = typeFilter === 'all' || permission.Type === typeFilter;
+    const matchesCategory = categoryFilter === 'all' || getPermissionCategory(permission.Value) === categoryFilter;
+
+    return matchesSearch && matchesType && matchesCategory;
+  });
+
+  const stats = {
+    total: permissions.length,
+    application: permissions.filter(p => p.Type === 'Application').length,
+    delegated: permissions.filter(p => p.Type === 'Delegated').length,
+    adminConsent: permissions.filter(p => p.RequiresAdminConsent).length
+  };
 
   return (
     <>
       <Helmet>
-        <title>Microsoft Graph Permissions - Microsoft Info</title>
-        <meta name="description" content="Comprehensive view of Microsoft Graph permissions, including both application and delegated permissions with detailed information." />
+        <title>Microsoft Graph Permissions Explorer</title>
+        <meta name="description" content="Explore and search Microsoft Graph permissions, including both application and delegated permissions with detailed information." />
         <link rel="canonical" href={window.location.href} />
       </Helmet>
 
       <div className="space-y-6">
-        <Grid numItems={1} numItemsSm={2} numItemsLg={3} className="gap-6">
-          <Card>
-            <Title>Permissions Overview</Title>
-            <Text className="mt-2">Distribution by category</Text>
-            <DonutChart
-              className="mt-4 h-40"
-              data={chartData}
-              category="count"
-              index="category"
-              valueFormatter={(value) => `${value} permissions`}
-              colors={["blue", "cyan", "indigo", "violet", "fuchsia"]}
-            />
+        <Grid numItems={1} numItemsSm={2} numItemsLg={4} className="gap-6">
+          <Card 
+            decoration="top"
+            decorationColor="blue"
+          >
+            <Flex>
+              <div>
+                <Text>Total Permissions</Text>
+                <Metric>{stats.total}</Metric>
+              </div>
+              <DocumentMagnifyingGlassIcon className="h-8 w-8 text-blue-500" />
+            </Flex>
           </Card>
-          <Card>
-            <Title>Total Permissions</Title>
-            <div className="mt-4">
-              <Metric>{filteredPermissions.length}</Metric>
-              <Text>{activeTab === 'app' ? 'Application' : 'Delegated'} Permissions</Text>
-            </div>
+
+          <Card
+            decoration="top"
+            decorationColor="green"
+          >
+            <Flex>
+              <div>
+                <Text>Application</Text>
+                <Metric>{stats.application}</Metric>
+              </div>
+              <KeyIcon className="h-8 w-8 text-green-500" />
+            </Flex>
           </Card>
-          <Card>
-            <Title>Authentication Status</Title>
-            <div className="mt-4">
-              <Flex justifyContent="start" className="space-x-2">
-                <Badge color={isAuthenticated ? "green" : "yellow"}>
-                  {isAuthenticated ? "Authenticated" : "Limited Data"}
-                </Badge>
-                {!isAuthenticated && (
-                  <Button size="xs" onClick={() => login()}>
-                    Sign in for full data
-                  </Button>
-                )}
-              </Flex>
-            </div>
+
+          <Card
+            decoration="top"
+            decorationColor="purple"
+          >
+            <Flex>
+              <div>
+                <Text>Delegated</Text>
+                <Metric>{stats.delegated}</Metric>
+              </div>
+              <KeyIcon className="h-8 w-8 text-purple-500" />
+            </Flex>
+          </Card>
+
+          <Card
+            decoration="top"
+            decorationColor="orange"
+          >
+            <Flex>
+              <div>
+                <Text>Admin Consent</Text>
+                <Metric>{stats.adminConsent}</Metric>
+              </div>
+              <ShieldCheckIcon className="h-8 w-8 text-orange-500" />
+            </Flex>
           </Card>
         </Grid>
 
         <Card>
           <div className="space-y-4">
-            <Title>Microsoft Graph Permissions</Title>
-            
-            <TabGroup defaultValue={activeTab} onValueChange={setActiveTab}>
-              <TabList>
-                <Tab value="app">Application Permissions</Tab>
-                <Tab value="delegate">Delegated Permissions</Tab>
-              </TabList>
-            </TabGroup>
+            <Flex>
+              <Title>Microsoft Graph Permissions</Title>
+              {!isAuthenticated && (
+                <Button 
+                  size="xs" 
+                  variant="secondary"
+                  icon={ShieldCheckIcon}
+                  onClick={() => login()}
+                >
+                  Sign in for full data
+                </Button>
+              )}
+            </Flex>
 
-            <TextInput
-              placeholder="Search permissions..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search permissions"
-            />
+            <Grid numItems={1} numItemsSm={3} className="gap-4">
+              <TextInput
+                placeholder="Search permissions..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search permissions"
+              />
+
+              <Select
+                value={typeFilter}
+                onValueChange={setTypeFilter}
+                placeholder="Filter by type"
+              >
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Application">Application</SelectItem>
+                <SelectItem value="Delegated">Delegated</SelectItem>
+              </Select>
+
+              <Select
+                value={categoryFilter}
+                onValueChange={setCategoryFilter}
+                placeholder="Filter by category"
+              >
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
+                ))}
+              </Select>
+            </Grid>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -213,7 +252,7 @@ export function Permissions() {
                     <TableHeaderCell>Permission</TableHeaderCell>
                     <TableHeaderCell>Display Name</TableHeaderCell>
                     <TableHeaderCell>Description</TableHeaderCell>
-                    <TableHeaderCell>Details</TableHeaderCell>
+                    <TableHeaderCell>Type</TableHeaderCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -226,29 +265,22 @@ export function Permissions() {
                   ) : filteredPermissions.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center">
-                        No permissions found matching your search.
+                        No permissions found matching your criteria.
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredPermissions.map((permission) => (
                       <TableRow 
-                        key={permission.Id}
+                        key={`${permission.Type}-${permission.Id}`}
                         className="cursor-pointer hover:bg-gray-50 transition-colors duration-200"
-                        onClick={() => navigate(`/permissions/${activeTab}/${permission.Id}`)}
-                        role="link"
-                        tabIndex={0}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            navigate(`/permissions/${activeTab}/${permission.Id}`);
-                          }
-                        }}
+                        onClick={() => navigate(`/permissions/${permission.Type?.toLowerCase()}/${permission.Id}`)}
                       >
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <code className="text-sm bg-gray-100 px-2 py-1 rounded">
                               {permission.Value}
                             </code>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 flex-wrap">
                               <Badge size="xs" color="blue">
                                 {getPermissionCategory(permission.Value)}
                               </Badge>
@@ -269,16 +301,12 @@ export function Permissions() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-col gap-1">
-                            <Badge size="xs" color="gray">
-                              {permission.Type}
-                            </Badge>
-                            {permission.IsBuiltIn && (
-                              <Badge size="xs" color="green">
-                                Built-in
-                              </Badge>
-                            )}
-                          </div>
+                          <Badge 
+                            color={permission.Type === 'Application' ? 'green' : 'purple'}
+                            size="sm"
+                          >
+                            {permission.Type}
+                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))
