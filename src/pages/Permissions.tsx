@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -24,6 +25,7 @@ interface GraphPermission {
 }
 
 export function Permissions() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('app');
   const [appPermissions, setAppPermissions] = useState<GraphPermission[]>([]);
   const [delegatePermissions, setDelegatePermissions] = useState<GraphPermission[]>([]);
@@ -81,7 +83,11 @@ export function Permissions() {
         </TableHead>
         <TableBody>
           {filteredPermissions.map((permission) => (
-            <TableRow key={permission.Id}>
+            <TableRow 
+              key={permission.Id}
+              className="cursor-pointer hover:bg-gray-50"
+              onClick={() => navigate(`/permissions/${activeTab}/${permission.Id}`)}
+            >
               <TableCell>{permission.Value}</TableCell>
               <TableCell>
                 {permission.DisplayName || permission.AdminConsentDisplayName}
