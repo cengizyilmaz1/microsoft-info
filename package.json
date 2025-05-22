@@ -12,6 +12,7 @@
   "dependencies": {
     "@azure/msal-browser": "^3.6.0",
     "@azure/msal-react": "^2.0.8",
+    "@heroicons/react": "^2.1.1",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@tanstack/react-table": "^8.11.2",
     "@tremor/react": "^3.11.1",
