@@ -14,7 +14,13 @@ import {
   Metric,
   List,
   ListItem,
-  Divider
+  Divider,
+  Table,
+  TableHead,
+  TableRow,
+  TableHeaderCell,
+  TableBody,
+  TableCell
 } from '@tremor/react';
 
 interface GraphPermission {
@@ -33,27 +39,37 @@ interface GraphPermission {
   Notes?: string;
 }
 
+interface MicrosoftApp {
+  AppId: string;
+  AppDisplayName: string;
+  AppOwnerOrganizationId: string;
+  Source: string;
+}
+
 export function PermissionDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [permission, setPermission] = useState<GraphPermission | null>(null);
+  const [apps, setApps] = useState<MicrosoftApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchPermissionDetails = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
-        // Try both application and delegated permissions
-        const [appResponse, delegateResponse] = await Promise.all([
+        // Fetch permission details
+        const [appResponse, delegateResponse, appsResponse] = await Promise.all([
           fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphAppRoles.json'),
-          fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphDelegateRoles.json')
+          fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/GraphDelegateRoles.json'),
+          fetch('https://raw.githubusercontent.com/merill/microsoft-info/main/_info/MicrosoftApps.json')
         ]);
 
         const appData = await appResponse.json();
         const delegateData = await delegateResponse.json();
+        const appsData = await appsResponse.json();
 
         let permissionData = appData.find((p: GraphPermission) => p.Id === id);
         let type = 'Application';
@@ -84,6 +100,13 @@ export function PermissionDetail() {
                 Origin: 'Microsoft Graph'
               };
             }
+
+            // Fetch applications using this permission
+            const appsUsingPermission = await graphService.getApplicationsUsingPermission(id, type);
+            const matchedApps = appsData.filter((app: MicrosoftApp) => 
+              appsUsingPermission.some((p: any) => p.appId === app.AppId)
+            );
+            setApps(matchedApps);
           } catch (error) {
             console.error('Error fetching live permission details:', error);
           }
@@ -99,7 +122,7 @@ export function PermissionDetail() {
     };
 
     if (id) {
-      fetchPermissionDetails();
+      fetchData();
     }
   }, [id, isAuthenticated]);
 
@@ -197,6 +220,42 @@ export function PermissionDetail() {
                     </ListItem>
                   ))}
                 </List>
+              </Card>
+            )}
+
+            {apps.length > 0 && (
+              <Card className="mt-6">
+                <Text className="font-medium">Applications Using This Permission</Text>
+                <div className="mt-4">
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeaderCell>Application Name</TableHeaderCell>
+                        <TableHeaderCell>Application ID</TableHeaderCell>
+                        <TableHeaderCell>Source</TableHeaderCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {apps.map((app) => (
+                        <TableRow 
+                          key={app.AppId}
+                          className="cursor-pointer hover:bg-gray-50"
+                          onClick={() => navigate(`/applications/${app.AppId}`)}
+                        >
+                          <TableCell>{app.AppDisplayName}</TableCell>
+                          <TableCell>
+                            <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                              {app.AppId}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <Badge color="blue">{app.Source}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </Card>
             )}
 

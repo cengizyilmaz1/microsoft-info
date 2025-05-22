@@ -34,21 +34,31 @@ export class GraphService {
     });
   }
 
-  public async getApplicationPermissions(appId: string) {
+  public async getApplicationsUsingPermission(permissionId: string, type: string) {
     if (!this.graphClient) {
       throw new Error("Graph client not initialized");
     }
 
     try {
       const response = await this.graphClient
-        .api(`/applications`)
-        .filter(`appId eq '${appId}'`)
-        .select("id,appId,displayName,requiredResourceAccess")
+        .api('/applications')
+        .select('id,appId,displayName,requiredResourceAccess')
         .get();
 
-      return response.value[0]?.requiredResourceAccess || [];
+      return response.value.filter((app: any) => {
+        const graphResourceAccess = app.requiredResourceAccess?.find((r: any) => 
+          r.resourceAppId === '00000003-0000-0000-c000-000000000000'
+        );
+
+        if (!graphResourceAccess) return false;
+
+        return graphResourceAccess.resourceAccess.some((access: any) => 
+          access.id === permissionId && 
+          (type === 'Application' ? access.type === 'Role' : access.type === 'Scope')
+        );
+      });
     } catch (error) {
-      console.error("Error fetching application permissions:", error);
+      console.error("Error fetching applications using permission:", error);
       throw error;
     }
   }
