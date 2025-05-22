@@ -16,7 +16,7 @@ function App() {
           <Route path="/applications" element={<Applications />} />
           <Route path="/applications/:id" element={<ApplicationDetail />} />
           <Route path="/permissions" element={<Permissions />} />
-          <Route path="/permissions/:type/:id" element={<PermissionDetail />} />
+          <Route path="/permissions/:id" element={<PermissionDetail />} />
         </Routes>
       </Layout>
     </Router>
