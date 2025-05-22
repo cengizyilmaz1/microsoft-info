@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^3.6.0",
+    "@azure/msal-react": "^2.0.8",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@tanstack/react-table": "^8.11.2",
     "@tremor/react": "^3.11.1",
     "react": "^18.2.0",
